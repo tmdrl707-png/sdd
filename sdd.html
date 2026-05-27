@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>정다면체 꼭짓점 탐구 3D 시뮬레이션</title>
+    
+    <!-- Three.js 코어 및 3D 뷰 컨트롤을 위한 OrbitControls CDN 로드 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <style>
+        /* 기본 리셋 및 웹 폰트 적용 */
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            display: flex; 
+            font-family: 'Pretendard', sans-serif; 
+            background-color: #f8fafc; 
+            color: #334155; 
+            height: 100vh;
+        }
+
+        /* 좌측 컨트롤 패널 UI 스타일링 */
+        #ui-panel { 
+            width: 340px; 
+            background: white; 
+            padding: 24px; 
+            box-shadow: 4px 0 15px rgba(0,0,0,0.05); 
+            z-index: 10; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+            overflow-y: auto; 
+        }
+
+        /* 우측 3D 렌더링 캔버스 영역 */
+        #canvas-container { 
+            flex-grow: 1; 
+            position: relative; 
+            background: linear-gradient(135deg, #e0f2fe 0%, #f8fafc 100%);
+        }
+
+        h1 { 
+            font-size: 1.4rem; 
+            font-weight: 800; 
+            color: #0f172a; 
+            margin: 0; 
+            line-height: 1.3;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-top: -15px;
+        }
+
+        .control-group { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px; 
+        }
+
+        label { 
+            font-weight: 600; 
+            font-size: 0.95rem; 
+            color: #1e293b;
+        }
+
+        select, input[type=range] { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 8px; 
+            font-family: inherit;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        select:focus { border-color: #3b82f6; }
+
+        /* 상태 요약 박스 (수학적 원리 표시) */
+        .math-box {
+            background-color: #f1f5f9;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .math-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.95rem;
+        }
+
+        .math-result {
+            font-weight: bold;
+            font-size: 1rem;
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 1px dashed #cbd5e1;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* 접기/펼치기 액션 버튼 */
+        button { 
+            padding: 14px; 
+            background-color: #3b82f6; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-size: 1.05rem;
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.25);
+        }
+        
+        button:hover { 
+            background-color: #2563eb; 
+            transform: translateY(-1px);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(59, 130, 246, 0.25);
+        }
+
+        #completeBtn {
+            background-color: #8b5cf6;
+            box-shadow: 0 4px 6px rgba(139, 92, 246, 0.25);
+            display: none; /* 입체 불가능 시 숨김 */
+        }
+        
+        #completeBtn:hover { background-color: #7c3aed; }
+        #completeBtn:active { box-shadow: 0 1px 2px rgba(139, 92, 246, 0.25); }
+
+        /* 교과서 지도 Tip 강조 영역 */
+        .info-box { 
+            background-color: #eff6ff; 
+            border-left: 4px solid #3b82f6; 
+            padding: 16px; 
+            font-size: 0.9rem; 
+            line-height: 1.6; 
+            color: #1e3a8a; 
+            border-radius: 4px 8px 8px 4px; 
+            margin-top: auto;
+        }
+
+        .error-msg {
+            color: #dc2626;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: center;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 좌측 UI 컨트롤 패널 -->
+    <div id="ui-panel">
+        <h1>정다면체 꼭짓점 탐구</h1>
+        <div class="subtitle">3D 시뮬레이션</div>
+        
+        <div class="control-group">
+            <label for="shapeSelect">다면체의 면 모양</label>
+            <select id="shapeSelect">
+                <option value="3">정삼각형</option>
+                <option value="4">정사각형</option>
+                <option value="5">정오각형</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="countSlider">한 꼭짓점에 모이는 면의 개수: <span id="countDisplay">3</span>개</label>
+            <!-- 자바스크립트 로직에 의해 max 값이 도형별로 동적 제한됩니다. -->
+            <input type="range" id="countSlider" min="1" max="5" value="3" step="1">
+        </div>
+
+        <!-- 수학적 원리를 실시간으로 보여주는 패널 -->
+        <div class="math-box">
+            <div class="math-row">
+                <span>정다각형 1개의 내각:</span>
+                <span id="singleAngle">60°</span>
+            </div>
+            <div class="math-row">
+                <span>모인 개수:</span>
+                <span id="multipliedCount">× 3</span>
+            </div>
+            <div class="math-result">
+                <span>내각의 합:</span>
+                <div>
+                    <span id="sumAngle" style="color: #047857;">180°</span>
+                    <div id="sumStatus" style="font-size: 0.8rem; text-align: right; color: #047857;">(입체 가능)</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="errorMsg" class="error-msg"></div>
+        <button id="foldBtn">3D로 접기</button>
+        <button id="completeBtn">입체도형 완성하기 ✨</button>
+
+        <div class="info-box">
+            <strong>💡 선생님의 지도 Tip</strong><br><br>
+            입체도형의 꼭짓점이 되려면 면이 <strong>최소 3개 이상</strong> 모여야 합니다.<br><br>
+            또한, 꼭짓점에 모인 각의 합이 <strong>360° 보다 작아야</strong> 입체로 접힐 수 있는 여유 공간이 생깁니다.
+        </div>
+    </div>
+
+    <!-- 우측 3D 렌더링 캔버스 -->
+    <div id="canvas-container"></div>
+
+    <script>
+        /**
+         * [ 1. Three.js 핵심 씬(Scene) 구성 ]
+         */
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        // 카메라 설정 (살짝 위에서 비스듬히 내려다보는 구도)
+        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+        camera.position.set(0, -10, 10); 
+        camera.lookAt(0, 0, 0);
+
+        // 렌더러 설정 (안티앨리어싱 적용하여 선명하게)
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        // 마우스 상호작용 컨트롤 (회전, 확대/축소, 패닝)
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // 부드러운 카메라 감속 효과
+        controls.dampingFactor = 0.05;
+
+        // 조명 설정 (입체감을 살리기 위한 다방향 조명)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); // 전체 밝기
+        scene.add(ambientLight);
+
+        const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.6); // 주 광원
+        dirLight1.position.set(5, 5, 10);
+        scene.add(dirLight1);
+
+        const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3); // 보조 광원 (뒷면)
+        dirLight2.position.set(-5, -5, -10);
+        scene.add(dirLight2);
+
+        /**
+         * [ 2. 데이터 상태 및 재질(Material) 정의 ]
+         */
+        const rootGroup = new THREE.Group();
+        scene.add(rootGroup);
+
+        // 도형별 색상 설정 (교과서 파스텔 톤)
+        const shapeColors = {
+            3: 0x86efac, // 정삼각형: 연녹색
+            4: 0xfde047, // 정사각형: 노란색
+            5: 0x93c5fd  // 정오각형: 파란색
+        };
+
+        let foldPivots = []; // 접히는 관절 역할을 할 Pivot 그룹 배열
+        let isFolded = false;
+        let currentFoldAngle = 0;
+        let targetFoldAngle = 0;
+
+        // --- 입체도형 완성 애니메이션을 위한 변수 ---
+        let isCompletedMode = false;
+        let currentCompleteGroup = null;
+        let completingFaces = [];
+        let animationPhase = 'none';
+        let animationFrameCount = 0;
+
+        /**
+         * 2D 평면 정다각형 Geometry 생성 함수
+         * 거북이 그래픽스(Turtle graphics) 원리를 응용하여 한 꼭짓점을 원점에 고정하고 그림
+         * @param {number} p 변의 수 (3, 4, 5)
+         */
+        function createPolygonGeometry(p) {
+            const shape = new THREE.Shape();
+            const sideLength = 2.5; // 다각형 한 변의 길이
+            const exteriorAngle = (Math.PI * 2) / p; // 외각
+            
+            let x = 0;
+            let y = 0;
+            let currentAngle = 0; // x축 방향에서 시작
+            
+            shape.moveTo(x, y); // (0,0) 원점에서 시작 (공유 꼭짓점)
+            
+            for (let i = 0; i < p; i++) {
+                x += Math.cos(currentAngle) * sideLength;
+                y += Math.sin(currentAngle) * sideLength;
+                if (i < p - 1) {
+                    shape.lineTo(x, y);
+                }
+                currentAngle += exteriorAngle; // 다음 변을 그리기 위해 각도 꺾음
+            }
+            // ShapeGeometry로 면을 생성
+            return new THREE.ShapeGeometry(shape);
+        }
+
+        /**
+         * 시뮬레이션 핵심 로직: 계층 구조(Kinematic Chain)를 통해 부채꼴 및 접기 구현
+         * @param {number} p 다각형 종류
+         * @param {number} n 모이는 면의 개수
+         */
+        function rebuildGeometry(p, n) {
+            // 기존 렌더링된 객체들 메모리 해제 및 초기화
+            while(rootGroup.children.length > 0){ 
+                const child = rootGroup.children[0];
+                rootGroup.remove(child); 
+            }
+            foldPivots = [];
+            currentFoldAngle = 0;
+            targetFoldAngle = 0;
+            isFolded = false;
+            document.getElementById('foldBtn').innerText = '3D로 접기';
+            document.getElementById('errorMsg').innerText = '';
+
+            const geometry = createPolygonGeometry(p);
+            
+            // 재질 (앞뒷면 동일 렌더링)
+            const material = new THREE.MeshStandardMaterial({ 
+                color: shapeColors[p], 
+                side: THREE.DoubleSide, 
+                roughness: 0.4, 
+                metalness: 0.1 
+            });
+            
+            // 외곽선 재질
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0x334155, linewidth: 2 });
+            
+            const interiorAngle = (p - 2) * Math.PI / p; // 각 다각형의 내각 (라디안)
+
+            let parentNode = rootGroup;
+
+            // n개의 다각형을 부채꼴 형태로 연결 (종이접기 관절 구조)
+            for (let i = 0; i < n; i++) {
+                const mesh = new THREE.Mesh(geometry, material);
+                
+                // 경계선 추가 (시각적 분리를 위함)
+                const edges = new THREE.EdgesGeometry(geometry);
+                const line = new THREE.LineSegments(edges, lineMaterial);
+                mesh.add(line);
+
+                if (i === 0) {
+                    // 첫 번째 다각형은 기준이 되므로 바로 씬(Root)에 추가
+                    parentNode.add(mesh);
+                    parentNode = mesh;
+                } else {
+                    // 두 번째 다각형부터는 이전 다각형의 '끝 변'을 축으로 삼아 자식으로 추가
+                    
+                    // 1. 축 방향을 이전 다각형의 끝 변(각도 alpha)에 맞춤
+                    const alignPivot = new THREE.Group();
+                    alignPivot.rotation.z = interiorAngle; 
+
+                    // 2. 실제로 3D로 접힐 때 회전할 관절 (로컬 X축 기준 회전)
+                    const foldPivot = new THREE.Group();
+                    alignPivot.add(foldPivot);
+                    
+                    // 3. 다각형을 관절에 부착
+                    foldPivot.add(mesh);
+
+                    parentNode.add(alignPivot);
+                    foldPivots.push(foldPivot); // 애니메이션 업데이트를 위해 배열 보관
+                    
+                    parentNode = mesh; // 꼬리에 꼬리를 무는 계층(Chain) 형성
+                }
+            }
+            
+            // 시각적 균형을 위해 생성된 다면체를 살짝 화면 중앙으로 이동
+            rootGroup.position.set(-0.5, 0.5, 0);
+        }
+
+        /**
+         * 수학적 이면각(Dihedral Angle) 공식 계산 함수
+         * 정p각형이 한 꼭짓점에 n개 모였을 때 접히는 목표 각도를 반환합니다.
+         */
+        function getTargetFoldAngle(p, n) {
+            // 수학적으로 입체를 구성하기 위한 조건식
+            const sinHalfTheta = Math.cos(Math.PI / n) / Math.sin(Math.PI / p);
+            
+            // 수학적으로 닫힌 입체를 형성할 수 없는 오버플로우 방지 (예: 평면이거나 겹침)
+            if (sinHalfTheta >= 1) return 0; 
+            
+            const theta = 2 * Math.asin(sinHalfTheta); // 내부 이면각 (라디안)
+            const phi = Math.PI - theta; // 2D 평면 상태(180도)에서 접어야 할 '접힘 각도'
+            
+            return phi;
+        }
+
+        /**
+         * [ 3. UI 상호작용 및 이벤트 리스너 ]
+         */
+        const shapeSelect = document.getElementById('shapeSelect');
+        const countSlider = document.getElementById('countSlider');
+        const countDisplay = document.getElementById('countDisplay');
+        const foldBtn = document.getElementById('foldBtn');
+        const completeBtn = document.getElementById('completeBtn');
+        const errorMsg = document.getElementById('errorMsg');
+
+        // 수학 계산 출력 DOM 요소
+        const singleAngleEl = document.getElementById('singleAngle');
+        const multipliedCountEl = document.getElementById('multipliedCount');
+        const sumAngleEl = document.getElementById('sumAngle');
+        const sumStatusEl = document.getElementById('sumStatus');
+
+        function updateUIAndRebuild() {
+            const p = parseInt(shapeSelect.value);
+            // 교과서 기준: 수학적으로 가능한 최대 개수로 슬라이더 제한
+            const maxAllowed = (p === 3) ? 5 : 3; 
+            countSlider.max = maxAllowed;
+            
+            if (parseInt(countSlider.value) > maxAllowed) {
+                countSlider.value = maxAllowed;
+            }
+            
+            const n = parseInt(countSlider.value);
+            countDisplay.innerText = n;
+
+            // 내각 수학 원리 계산 및 표시
+            const singleAngleDeg = (p - 2) * 180 / p;
+            const sumDeg = singleAngleDeg * n;
+            
+            singleAngleEl.innerText = `${singleAngleDeg}°`;
+            multipliedCountEl.innerText = `× ${n}`;
+            sumAngleEl.innerText = `${sumDeg}°`;
+            
+            if (n < 3) {
+                sumAngleEl.style.color = "#ea580c"; // 오렌지색
+                sumStatusEl.style.color = "#ea580c";
+                sumStatusEl.innerText = "(면 3개 필요)";
+            } else if (sumDeg < 360) {
+                sumAngleEl.style.color = "#047857"; // 녹색
+                sumStatusEl.style.color = "#047857";
+                sumStatusEl.innerText = "(입체 가능)";
+            } else {
+                sumAngleEl.style.color = "#dc2626"; // 붉은색
+                sumStatusEl.style.color = "#dc2626";
+                sumStatusEl.innerText = "(평면 됨)";
+            }
+
+            // 완성하기 버튼 상태 초기화
+            isCompletedMode = false;
+            animationPhase = 'none';
+            rootGroup.visible = true;
+            rootGroup.scale.set(1, 1, 1);
+            if(currentCompleteGroup) {
+                scene.remove(currentCompleteGroup);
+                currentCompleteGroup = null;
+            }
+            completeBtn.innerText = '입체도형 완성하기 ✨';
+            completeBtn.style.backgroundColor = '#8b5cf6';
+
+            // 입체 가능(조건 만족)일 때만 버튼 표시
+            if (n >= 3 && sumDeg < 360) {
+                completeBtn.style.display = 'block';
+            } else {
+                completeBtn.style.display = 'none';
+            }
+
+            // 3D 씬 재구성
+            rebuildGeometry(p, n);
+        }
+
+        shapeSelect.addEventListener('change', updateUIAndRebuild);
+        countSlider.addEventListener('input', updateUIAndRebuild);
+
+        foldBtn.addEventListener('click', () => {
+            const p = parseInt(shapeSelect.value);
+            const n = parseInt(countSlider.value);
+
+            if (n < 3) {
+                errorMsg.innerText = "접기 실패: 면이 최소 3개 이상이어야 입체가 됩니다!";
+                return;
+            }
+
+            isFolded = !isFolded;
+            
+            if (isFolded) {
+                targetFoldAngle = getTargetFoldAngle(p, n);
+                foldBtn.innerText = '평면으로 펼치기';
+                foldBtn.style.backgroundColor = "#0ea5e9";
+                errorMsg.innerText = '';
+            } else {
+                targetFoldAngle = 0; // 평면 상태로 복귀
+                foldBtn.innerText = '3D로 접기';
+                foldBtn.style.backgroundColor = "#3b82f6";
+            }
+        });
+
+        // 면 분리 유틸 함수: 내장 Geometry의 면들을 개별 BufferGeometry로 분리
+        function extractFaces(geometry) {
+            let nonIndexedGeo = geometry.index ? geometry.toNonIndexed() : geometry;
+            if (!nonIndexedGeo.getAttribute('normal')) nonIndexedGeo.computeVertexNormals();
+            
+            const posAttr = nonIndexedGeo.getAttribute('position');
+            const normAttr = nonIndexedGeo.getAttribute('normal');
+            
+            const faces = [];
+            const faceMap = new Map();
+            
+            for (let i = 0; i < posAttr.count; i += 3) {
+                const nx = normAttr.getX(i), ny = normAttr.getY(i), nz = normAttr.getZ(i);
+                // 소수점 오차 보정을 위해 정밀도 낮춤
+                const key = `${(Math.abs(nx)<0.001?0:nx).toFixed(2)}_${(Math.abs(ny)<0.001?0:ny).toFixed(2)}_${(Math.abs(nz)<0.001?0:nz).toFixed(2)}`;
+                
+                if (!faceMap.has(key)) faceMap.set(key, []);
+                const vertices = faceMap.get(key);
+                for (let j = 0; j < 3; j++) {
+                    vertices.push(posAttr.getX(i+j), posAttr.getY(i+j), posAttr.getZ(i+j));
+                }
+            }
+            
+            faceMap.forEach((vertices) => {
+                const faceGeo = new THREE.BufferGeometry();
+                faceGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                faceGeo.computeVertexNormals();
+                faces.push(faceGeo);
+            });
+            return faces;
+        }
+
+        // 전체 정다면체 생성 함수
+        function createFullPolyhedron(p, n) {
+            let geometry;
+            const a = 2.5; // 기준 변의 길이
+            if (p === 3 && n === 3) geometry = new THREE.TetrahedronGeometry(a * 0.61237);
+            else if (p === 3 && n === 4) geometry = new THREE.OctahedronGeometry(a * 0.7071);
+            else if (p === 3 && n === 5) geometry = new THREE.IcosahedronGeometry(a * 0.951);
+            else if (p === 4 && n === 3) geometry = new THREE.BoxGeometry(a, a, a);
+            else if (p === 5 && n === 3) geometry = new THREE.DodecahedronGeometry(a * 1.4013);
+            else return null;
+
+            const faces = extractFaces(geometry);
+            const material = new THREE.MeshStandardMaterial({ 
+                color: shapeColors[p], side: THREE.DoubleSide, roughness: 0.4, metalness: 0.1, transparent: true, opacity: 0 
+            });
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0x334155, linewidth: 2, transparent: true, opacity: 0 });
+
+            const group = new THREE.Group();
+            completingFaces = [];
+
+            faces.forEach((faceGeo, index) => {
+                const mesh = new THREE.Mesh(faceGeo, material.clone());
+                mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(faceGeo), lineMaterial.clone()));
+                
+                // 중심을 피벗으로 설정하여 스케일 애니메이션이 중앙에서부터 일어나게 함
+                faceGeo.computeBoundingBox();
+                const center = new THREE.Vector3();
+                faceGeo.boundingBox.getCenter(center);
+                mesh.position.copy(center);
+                faceGeo.translate(-center.x, -center.y, -center.z);
+                
+                mesh.scale.set(0.01, 0.01, 0.01);
+                group.add(mesh);
+                // 인덱스 차이를 두어 순차적으로 팝업되게 설정
+                completingFaces.push({ mesh: mesh, targetScale: 1, delay: index * 4 });
+            });
+            
+            // 시각적 균형과 겹침 방지를 위해 전체 씬 중앙에서 약간 위로 배치하고 회전
+            group.position.set(-0.5, 0.5, 0);
+            group.rotation.set(0.3, 0.5, 0); 
+            
+            scene.add(group);
+            return group;
+        }
+
+        // 완성하기 버튼 이벤트 로직
+        completeBtn.addEventListener('click', () => {
+            const p = parseInt(shapeSelect.value);
+            const n = parseInt(countSlider.value);
+            
+            if (n < 3 || getTargetFoldAngle(p, n) === 0) return;
+
+            // 안 접혔다면 강제로 먼저 접음
+            if (!isFolded && !isCompletedMode) {
+                foldBtn.click();
+            }
+
+            if (!isCompletedMode) {
+                isCompletedMode = true;
+                completeBtn.innerText = '부분 꼭짓점만 보기';
+                completeBtn.style.backgroundColor = '#6366f1';
+                
+                if (!currentCompleteGroup) {
+                    currentCompleteGroup = createFullPolyhedron(p, n);
+                } else {
+                    currentCompleteGroup.visible = true;
+                }
+                animationPhase = 'toComplete';
+                animationFrameCount = 0;
+            } else {
+                isCompletedMode = false;
+                completeBtn.innerText = '입체도형 완성하기 ✨';
+                completeBtn.style.backgroundColor = '#8b5cf6';
+                
+                animationPhase = 'toRoot';
+                animationFrameCount = 0;
+            }
+        });
+
+        /**
+         * [ 4. Three.js 렌더링 애니메이션 루프 ]
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // OrbitControls 감속 효과 적용
+
+            // 부드러운 각도 트랜지션 (Lerp 보간법)
+            const diff = targetFoldAngle - currentFoldAngle;
+            if (Math.abs(diff) > 0.001) {
+                currentFoldAngle += diff * 0.08; // 애니메이션 속도
+                
+                // 모든 관절(Pivot)에 계산된 현재 각도를 동시 적용하여 둥글게 말아올림
+                foldPivots.forEach(pivot => {
+                    pivot.rotation.x = currentFoldAngle; 
+                });
+            }
+
+            // 입체도형 전환 애니메이션 로직
+            if (animationPhase === 'toComplete') {
+                animationFrameCount++;
+                // 기존 부채꼴 꼭짓점 축소 및 숨김
+                if (rootGroup.scale.x > 0.01) {
+                    rootGroup.scale.multiplyScalar(0.85);
+                } else {
+                    rootGroup.visible = false;
+                }
+
+                // 완성될 면들의 개별 팝업 효과
+                completingFaces.forEach(item => {
+                    if (animationFrameCount > item.delay) {
+                        item.mesh.material.opacity = Math.min(1, item.mesh.material.opacity + 0.08);
+                        item.mesh.children[0].material.opacity = Math.min(1, item.mesh.children[0].material.opacity + 0.08);
+                        
+                        const sd = (item.targetScale - item.mesh.scale.x) * 0.2;
+                        item.mesh.scale.x += sd;
+                        item.mesh.scale.y += sd;
+                        item.mesh.scale.z += sd;
+                    }
+                });
+            } else if (animationPhase === 'toRoot') {
+                animationFrameCount++;
+                rootGroup.visible = true;
+                if (rootGroup.scale.x < 1) {
+                    const sd = (1 - rootGroup.scale.x) * 0.2;
+                    rootGroup.scale.x += sd;
+                    rootGroup.scale.y += sd;
+                    rootGroup.scale.z += sd;
+                }
+
+                let allHidden = true;
+                completingFaces.forEach(item => {
+                    item.mesh.material.opacity = Math.max(0, item.mesh.material.opacity - 0.15);
+                    item.mesh.children[0].material.opacity = Math.max(0, item.mesh.children[0].material.opacity - 0.15);
+                    
+                    item.mesh.scale.multiplyScalar(0.8);
+                    if (item.mesh.scale.x > 0.01) allHidden = false;
+                });
+                
+                if (allHidden && currentCompleteGroup) {
+                    currentCompleteGroup.visible = false;
+                    animationPhase = 'none';
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // 창 크기 조절 시 카메라 비율 및 렌더러 자동 조정
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // 앱 최초 실행 초기화
+        updateUIAndRebuild();
+        animate();
+    </script>
+</body>
+</html>
